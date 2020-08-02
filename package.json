@@ -1,0 +1,44 @@
+{
+  "name": "amplify-backend-gen",
+  "version": "0.0.1",
+  "description": "Generate Amplify backend resources from code",
+  "main": "dist/types.js",
+  "types": "dist/types.d.ts",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "build": "rm -Rf dist && tsc",
+    "prepublish": "yarn build"
+  },
+  "bin": {
+    "generate-amplify-resources": "./dist/buildAmplify.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">= 10"
+  },
+  "keywords": [
+    "amplify",
+    "generate",
+    "backend"
+  ],
+  "author": "Matt Lavin <matt.lavin@gmail.com>",
+  "license": "ISC",
+  "devDependencies": {
+    "@types/aws-lambda": "^8.10.59",
+    "@types/lodash": "^4.14.158",
+    "@types/node": "^14.0.27",
+    "@types/webpack": "^4.41.21",
+    "@types/yargs": "^15.0.5",
+    "typescript": "^3.9.7"
+  },
+  "dependencies": {
+    "file-loader": "^6.0.0",
+    "lodash": "^4.17.19",
+    "ts-loader": "^8.0.2",
+    "ts-node": "^8.10.2",
+    "webpack": "^4.44.1",
+    "yargs": "^15.4.1"
+  }
+}
