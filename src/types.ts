@@ -94,10 +94,16 @@ export const reducePermission = <B>(
   return fU(p);
 };
 
+export type Region = "us-east-1" | "us-west-1";
+export type Runtime = "nodejs10.x" | "nodejs12.x";
+
 export type LambdaFunction = {
   readonly permissions: readonly Permission[];
   readonly environment: readonly EnvironmentVariable[];
   readonly eventSource?: Table;
+  readonly runtime?: Runtime;
+  readonly region?: Region;
+  readonly handlerSrc?: string;
 };
 
 export const isTablePermission = (t: Permission): t is TablePermission =>

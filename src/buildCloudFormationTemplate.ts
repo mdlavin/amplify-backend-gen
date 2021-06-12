@@ -16,6 +16,8 @@ import {
   CoalescedVariable,
   reducePermission,
   reduceEnvionmentVariable,
+  Region,
+  Runtime,
 } from "./types";
 
 export type CFParameter = {
@@ -74,15 +76,16 @@ export interface PolicyProvider<T> {
   toPolicyStatement(t: T): object;
 }
 
-const ResourceOutputReferenceParameterProvider: ParameterProvider<ResourceOutputReference> = {
-  toParameter(ref: ResourceOutputReference) {
-    const name = `${ref.category}${ref.resource}${ref.output}`;
-    return {
-      type: "Parameter",
-      name,
-    } as const;
-  },
-};
+const ResourceOutputReferenceParameterProvider: ParameterProvider<ResourceOutputReference> =
+  {
+    toParameter(ref: ResourceOutputReference) {
+      const name = `${ref.category}${ref.resource}${ref.output}`;
+      return {
+        type: "Parameter",
+        name,
+      } as const;
+    },
+  };
 
 const ParameterExpressionProvider: ExpressionProvider<Parameter> = {
   toExpression: (p: Parameter) => ({
@@ -90,13 +93,14 @@ const ParameterExpressionProvider: ExpressionProvider<Parameter> = {
   }),
 };
 
-const ResourceOutputReferenceExpressionProvider: ExpressionProvider<ResourceOutputReference> = {
-  toExpression(ref: ResourceOutputReference) {
-    return ParameterExpressionProvider.toExpression(
-      ResourceOutputReferenceParameterProvider.toParameter(ref)
-    );
-  },
-};
+const ResourceOutputReferenceExpressionProvider: ExpressionProvider<ResourceOutputReference> =
+  {
+    toExpression(ref: ResourceOutputReference) {
+      return ParameterExpressionProvider.toExpression(
+        ResourceOutputReferenceParameterProvider.toParameter(ref)
+      );
+    },
+  };
 
 export const TableParameterProvider: ParameterProvider<Table> = {
   toParameter(table) {
@@ -106,9 +110,10 @@ export const TableParameterProvider: ParameterProvider<Table> = {
   },
 };
 
-export const TableResourceOutputReferenceProvider: ResourceOutputReferenceProvider<Table> = {
-  toOutputReferences: (table) => [apiTableOutputReference(table)],
-};
+export const TableResourceOutputReferenceProvider: ResourceOutputReferenceProvider<Table> =
+  {
+    toOutputReferences: (table) => [apiTableOutputReference(table)],
+  };
 
 export const TableDetailProvider: TableDetailProvider<Table> = {
   toNameExpression(table) {
@@ -190,9 +195,10 @@ const PermissionPolicyProvider: PolicyProvider<Permission> = {
       };
     },
     (permission) => {
-      const userPoolIdExpression = ResourceOutputReferenceExpressionProvider.toExpression(
-        userPoolOutputReference(permission.userPool, "UserPoolId")
-      );
+      const userPoolIdExpression =
+        ResourceOutputReferenceExpressionProvider.toExpression(
+          userPoolOutputReference(permission.userPool, "UserPoolId")
+        );
 
       return {
         Effect: "Allow",
@@ -260,14 +266,15 @@ const isResourceOutputReference = (
   resource: string | ResourceOutputReference
 ): resource is ResourceOutputReference => typeof resource !== "string";
 
-const PermissionResourceOutputReferenceProvider: ResourceOutputReferenceProvider<Permission> = {
-  toOutputReferences: reducePermission(
-    ({ table }) => [apiTableOutputReference(table)],
-    ({ userPool }) => [userPoolOutputReference(userPool, "UserPoolId")],
-    () => [],
-    ({ resources }) => resources.filter(isResourceOutputReference)
-  ),
-};
+const PermissionResourceOutputReferenceProvider: ResourceOutputReferenceProvider<Permission> =
+  {
+    toOutputReferences: reducePermission(
+      ({ table }) => [apiTableOutputReference(table)],
+      ({ userPool }) => [userPoolOutputReference(userPool, "UserPoolId")],
+      () => [],
+      ({ resources }) => resources.filter(isResourceOutputReference)
+    ),
+  };
 
 const PermissionConditionProvider: ConditionProvider<Permission> = {
   toConditions() {
@@ -291,29 +298,30 @@ const valueToParameter = (
   ];
 };
 
-const EnvironmentVariableParametersProvider: ParametersProvider<EnvironmentVariable> = {
-  toParameters(env) {
-    if (env instanceof TableNameVariable) {
-      return [
-        ResourceOutputReferenceParameterProvider.toParameter(
-          apiTableOutputReference(env.table)
-        ),
-      ];
-    }
+const EnvironmentVariableParametersProvider: ParametersProvider<EnvironmentVariable> =
+  {
+    toParameters(env) {
+      if (env instanceof TableNameVariable) {
+        return [
+          ResourceOutputReferenceParameterProvider.toParameter(
+            apiTableOutputReference(env.table)
+          ),
+        ];
+      }
 
-    if (env instanceof ParameterVariable) {
-      return valueToParameter(env.parameter);
-    }
+      if (env instanceof ParameterVariable) {
+        return valueToParameter(env.parameter);
+      }
 
-    if (env instanceof ResourceOutputVariable) {
-      return [
-        ResourceOutputReferenceParameterProvider.toParameter(env.reference),
-      ];
-    }
+      if (env instanceof ResourceOutputVariable) {
+        return [
+          ResourceOutputReferenceParameterProvider.toParameter(env.reference),
+        ];
+      }
 
-    return [...valueToParameter(env.first), ...valueToParameter(env.second)];
-  },
-};
+      return [...valueToParameter(env.first), ...valueToParameter(env.second)];
+    },
+  };
 
 const variableValueExpressionToCfExpression = reduceVariableValueExpression(
   ParameterExpressionProvider.toExpression,
@@ -325,84 +333,88 @@ const variableValueExpressionToCfExpression = reduceVariableValueExpression(
 const conditionNameForEnv = (env: CoalescedVariable) =>
   `FirstNotEmpty_${env.name}`;
 
-const EnvironmentVariableVariableProvider: VariableProvider<EnvironmentVariable> = {
-  toVariable: reduceEnvionmentVariable<CFVariableDefinition>(
-    ({ table }) => {
-      const tableOutputRef = apiTableOutputReference(table);
-      const tableParameter = ResourceOutputReferenceParameterProvider.toParameter(
-        tableOutputRef
-      );
-      return {
-        name: `${table.tableName}_table_name`.toUpperCase(),
-        block: {
-          "Fn::ImportValue": {
-            "Fn::Sub": `\${${tableParameter.name}}:GetAtt:${table.tableName}Table:Name`,
-          },
-        },
-      };
-    },
-    ({ parameter, name }) => ({
-      name,
-      block: ParameterExpressionProvider.toExpression(parameter),
-    }),
-
-    ({ name, reference }) => ({
-      name,
-      block: ResourceOutputReferenceExpressionProvider.toExpression(reference),
-    }),
-
-    (coalescedVar) => ({
-      name: coalescedVar.name,
-      block: {
-        "Fn::If": [
-          conditionNameForEnv(coalescedVar),
-          variableValueExpressionToCfExpression(coalescedVar.first),
-          variableValueExpressionToCfExpression(coalescedVar.second),
-        ],
-      },
-    })
-  ),
-};
-
-const variableValueExpressionToResourceOutputReferences = reduceVariableValueExpression(
-  () => [],
-  (reference) => [reference]
-);
-
-const EnvironmentVariableResourceOutputReferenceProvider: ResourceOutputReferenceProvider<EnvironmentVariable> = {
-  toOutputReferences: reduceEnvionmentVariable<ResourceOutputReference[]>(
-    ({ table }) => [apiTableOutputReference(table)],
-    () => [],
-    ({ reference }) => [reference],
-    ({ first, second }) => [
-      ...variableValueExpressionToResourceOutputReferences(first),
-      ...variableValueExpressionToResourceOutputReferences(second),
-    ]
-  ),
-};
-
-const EnvironmentVariableConditionProvider: ConditionProvider<EnvironmentVariable> = {
-  toConditions: reduceEnvionmentVariable(
-    () => [],
-    () => [],
-    () => [],
-    (c) => [
-      {
-        name: conditionNameForEnv(c),
-        block: {
-          "Fn::Not": [
-            {
-              "Fn::Equals": [
-                variableValueExpressionToCfExpression(c.first),
-                "",
-              ],
+const EnvironmentVariableVariableProvider: VariableProvider<EnvironmentVariable> =
+  {
+    toVariable: reduceEnvionmentVariable<CFVariableDefinition>(
+      ({ table }) => {
+        const tableOutputRef = apiTableOutputReference(table);
+        const tableParameter =
+          ResourceOutputReferenceParameterProvider.toParameter(tableOutputRef);
+        return {
+          name: `${table.tableName}_table_name`.toUpperCase(),
+          block: {
+            "Fn::ImportValue": {
+              "Fn::Sub": `\${${tableParameter.name}}:GetAtt:${table.tableName}Table:Name`,
             },
+          },
+        };
+      },
+      ({ parameter, name }) => ({
+        name,
+        block: ParameterExpressionProvider.toExpression(parameter),
+      }),
+
+      ({ name, reference }) => ({
+        name,
+        block:
+          ResourceOutputReferenceExpressionProvider.toExpression(reference),
+      }),
+
+      (coalescedVar) => ({
+        name: coalescedVar.name,
+        block: {
+          "Fn::If": [
+            conditionNameForEnv(coalescedVar),
+            variableValueExpressionToCfExpression(coalescedVar.first),
+            variableValueExpressionToCfExpression(coalescedVar.second),
           ],
         },
-      },
-    ]
-  ),
-};
+      })
+    ),
+  };
+
+const variableValueExpressionToResourceOutputReferences =
+  reduceVariableValueExpression(
+    () => [],
+    (reference) => [reference]
+  );
+
+const EnvironmentVariableResourceOutputReferenceProvider: ResourceOutputReferenceProvider<EnvironmentVariable> =
+  {
+    toOutputReferences: reduceEnvionmentVariable<ResourceOutputReference[]>(
+      ({ table }) => [apiTableOutputReference(table)],
+      () => [],
+      ({ reference }) => [reference],
+      ({ first, second }) => [
+        ...variableValueExpressionToResourceOutputReferences(first),
+        ...variableValueExpressionToResourceOutputReferences(second),
+      ]
+    ),
+  };
+
+const EnvironmentVariableConditionProvider: ConditionProvider<EnvironmentVariable> =
+  {
+    toConditions: reduceEnvionmentVariable(
+      () => [],
+      () => [],
+      () => [],
+      (c) => [
+        {
+          name: conditionNameForEnv(c),
+          block: {
+            "Fn::Not": [
+              {
+                "Fn::Equals": [
+                  variableValueExpressionToCfExpression(c.first),
+                  "",
+                ],
+              },
+            ],
+          },
+        },
+      ]
+    ),
+  };
 
 export const CFEnvironment: ParametersProvider<EnvironmentVariable> &
   VariableProvider<EnvironmentVariable> &
@@ -426,6 +438,8 @@ export const CFPermissions: ParametersProvider<Permission> &
 
 export const buildCloudFormationTemplate = <T, E, P>({
   name,
+  region,
+  runtime = "nodejs12.x",
   eventSource,
   environment,
   permissions,
@@ -434,6 +448,8 @@ export const buildCloudFormationTemplate = <T, E, P>({
   cfTable,
 }: {
   name: string;
+  region?: Region;
+  runtime?: Runtime;
   eventSource: T;
   environment: readonly E[];
   permissions: readonly P[];
@@ -460,6 +476,12 @@ export const buildCloudFormationTemplate = <T, E, P>({
     ...environment.map(cfEnvironment.toConditions),
     ...permissions.map(cfPermissions.toConditions),
   ]);
+
+  const regionExpression = region
+    ? region
+    : {
+        Ref: "AWS::Region",
+      };
 
   return {
     AWSTemplateFormatVersion: "2010-09-09",
@@ -527,9 +549,7 @@ export const buildCloudFormationTemplate = <T, E, P>({
                 ENV: {
                   Ref: "env",
                 },
-                REGION: {
-                  Ref: "AWS::Region",
-                },
+                REGION: regionExpression,
               },
               ...environment
                 .map(cfEnvironment.toVariable)
@@ -539,7 +559,7 @@ export const buildCloudFormationTemplate = <T, E, P>({
           Role: {
             "Fn::GetAtt": ["LambdaExecutionRole", "Arn"],
           },
-          Runtime: "nodejs10.x",
+          Runtime: runtime,
           Timeout: "25",
         },
       },
@@ -602,9 +622,7 @@ export const buildCloudFormationTemplate = <T, E, P>({
                   "Fn::Sub": [
                     "arn:aws:logs:${region}:${account}:log-group:/aws/lambda/${lambda}:log-stream:*",
                     {
-                      region: {
-                        Ref: "AWS::Region",
-                      },
+                      region: regionExpression,
                       account: {
                         Ref: "AWS::AccountId",
                       },
@@ -678,9 +696,7 @@ export const buildCloudFormationTemplate = <T, E, P>({
         },
       },
       Region: {
-        Value: {
-          Ref: "AWS::Region",
-        },
+        Value: regionExpression,
       },
       LambdaExecutionRole: {
         Value: {

@@ -84,6 +84,7 @@ const buildFunction = async (
     ({ category, resource }) => `${category}-${resource}`
   );
 
+  backendConfig.function = backendConfig.function || {};
   backendConfig.function[handlerDir] = {
     service: "Lambda",
     providerPlugin: "awscloudformation",
@@ -119,8 +120,12 @@ const buildFunction = async (
     "utf8"
   );
 
+  const entrySrc = metadata.handlerSrc
+    ? path.relative(metadataModulePath, metadata.handlerSrc)
+    : path.join(process.cwd(), handlersDir, handlerDir, "src", "index.ts");
+
   const webpackConfig: webpack.Configuration = {
-    entry: path.join(process.cwd(), handlersDir, handlerDir, "src", "index.ts"),
+    entry: entrySrc,
     output: {
       publicPath: "./",
       path: srcOutputDir,
